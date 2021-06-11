@@ -9,7 +9,7 @@ import copy
 
 from matplotlib import pyplot as plt
 
-from .self_attention import gather_edges, gather_nodes, Normalize
+from self_attention import gather_edges, gather_nodes, Normalize
 
 class PositionalEncodings(nn.Module):
     def __init__(self, num_embeddings, period_range=[2,1000]):
@@ -86,18 +86,7 @@ class ProteinFeatures(nn.Module):
         D_neighbors, E_idx = torch.topk(D_adjust, self.top_k, dim=-1, largest=False)
         mask_neighbors = gather_edges(mask_2D.unsqueeze(-1), E_idx)
 
-        # Debug plot KNN
-        # print(E_idx[:10,:10])
-        # D_simple = mask_2D * torch.zeros(D.size()).scatter(-1, E_idx, torch.ones_like(knn_D))
-        # print(D_simple)
-        # fig = plt.figure(figsize=(4,4))
-        # ax = fig.add_subplot(111)
-        # D_simple = D.data.numpy()[0,:,:]
-        # plt.imshow(D_simple, aspect='equal')
-        # plt.axis('off')
-        # plt.tight_layout()
-        # plt.savefig('D_knn.pdf')
-        # exit(0)
+        
         return D_neighbors, E_idx, mask_neighbors
 
     def _rbf(self, D):
@@ -108,18 +97,6 @@ class ProteinFeatures(nn.Module):
         D_sigma = (D_max - D_min) / D_count
         D_expand = torch.unsqueeze(D, -1)
         RBF = torch.exp(-((D_expand - D_mu) / D_sigma)**2)
-
-        # for i in range(D_count):
-        #     fig = plt.figure(figsize=(4,4))
-        #     ax = fig.add_subplot(111)
-        #     rbf_i = RBF.data.numpy()[0,i,:,:]
-        #     # rbf_i = D.data.numpy()[0,0,:,:]
-        #     plt.imshow(rbf_i, aspect='equal')
-        #     plt.axis('off')
-        #     plt.tight_layout()
-        #     plt.savefig('rbf{}.pdf'.format(i))
-        #     print(np.min(rbf_i), np.max(rbf_i), np.mean(rbf_i))
-        # exit(0)
         return RBF
 
     def _quaternions(self, R):

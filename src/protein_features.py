@@ -29,14 +29,6 @@ class PositionalEncodings(nn.Module):
             torch.arange(0, self.num_embeddings, 2, dtype=torch.float32)
             * -(np.log(10000.0) / self.num_embeddings)
         )
-        # Grid-aligned
-        # frequency = 2. * np.pi * torch.exp(
-        #     -torch.linspace(
-        #         np.log(self.period_range[0]), 
-        #         np.log(self.period_range[1]),
-        #         self.num_embeddings / 2
-        #     )
-        # )
         angles = d * frequency.view((1,1,1,-1))
         E = torch.cat((torch.cos(angles), torch.sin(angles)), -1)
         return E
@@ -104,9 +96,6 @@ class ProteinFeatures(nn.Module):
             R [...,3,3]
             Q [...,4]
         """
-        # Simple Wikipedia version
-        # en.wikipedia.org/wiki/Rotation_matrix#Quaternion
-        # For other options see math.stackexchange.com/questions/2074316/calculating-rotation-axis-from-rotation-matrix
         diag = torch.diagonal(R, dim1=-2, dim2=-1)
         Rxx, Ryy, Rzz = diag.unbind(-1)
         magnitudes = 0.5 * torch.sqrt(torch.abs(1 + torch.stack([
@@ -126,24 +115,6 @@ class ProteinFeatures(nn.Module):
         Q = torch.cat((xyz, w), -1)
         Q = F.normalize(Q, dim=-1)
 
-        # Axis of rotation
-        # Replace bad rotation matrices with identity
-        # I = torch.eye(3).view((1,1,1,3,3))
-        # I = I.expand(*(list(R.shape[:3]) + [-1,-1]))
-        # det = (
-        #     R[:,:,:,0,0] * (R[:,:,:,1,1] * R[:,:,:,2,2] - R[:,:,:,1,2] * R[:,:,:,2,1])
-        #     - R[:,:,:,0,1] * (R[:,:,:,1,0] * R[:,:,:,2,2] - R[:,:,:,1,2] * R[:,:,:,2,0])
-        #     + R[:,:,:,0,2] * (R[:,:,:,1,0] * R[:,:,:,2,1] - R[:,:,:,1,1] * R[:,:,:,2,0])
-        # )
-        # det_mask = torch.abs(det.unsqueeze(-1).unsqueeze(-1))
-        # R = det_mask * R + (1 - det_mask) * I
-
-        # DEBUG
-        # https://math.stackexchange.com/questions/2074316/calculating-rotation-axis-from-rotation-matrix
-        # Columns of this are in rotation plane
-        # A = R - I
-        # v1, v2 = A[:,:,:,:,0], A[:,:,:,:,1]
-        # axis = F.normalize(torch.cross(v1, v2), dim=-1)
         return Q
 
     def _contacts(self, D_neighbors, E_idx, mask_neighbors, cutoff=8):
@@ -180,19 +151,7 @@ class ProteinFeatures(nn.Module):
 
         HB = (U < -0.5).type(torch.float32)
         neighbor_HB = mask_neighbors * gather_edges(HB.unsqueeze(-1),  E_idx)
-        # print(HB)
-        # HB = F.sigmoid(U)
-        # U_np = U.cpu().data.numpy()
-        # # plt.matshow(np.mean(U_np < -0.5, axis=0))
-        # plt.matshow(HB[0,:,:])
-        # plt.colorbar()
-        # plt.show()
-        # D_CA = _distance(X_atoms['CA'], X_atoms['CA'])
-        # D_CA = D_CA.cpu().data.numpy()
-        # plt.matshow(D_CA[0,:,:] < contact_D)
-        # # plt.colorbar()
-        # plt.show()
-        # exit(0)
+      
         return neighbor_HB
 
     def _orientations_coarse(self, X, E_idx, eps=1e-6):
@@ -226,17 +185,6 @@ class ProteinFeatures(nn.Module):
         O = O.view(list(O.shape[:2]) + [9])
         O = F.pad(O, (0,0,1,2), 'constant', 0)
 
-        # DEBUG: Viz [dense] pairwise orientations 
-        # O = O.view(list(O.shape[:2]) + [3,3])
-        # dX = X.unsqueeze(2) - X.unsqueeze(1)
-        # dU = torch.matmul(O.unsqueeze(2), dX.unsqueeze(-1)).squeeze(-1)
-        # dU = dU / torch.norm(dU, dim=-1, keepdim=True)
-        # dU = (dU + 1.) / 2.
-        # plt.imshow(dU.data.numpy()[0])
-        # plt.show()
-        # print(dX.size(), O.size(), dU.size())
-        # exit(0)
-
         O_neighbors = gather_nodes(O, E_idx)
         X_neighbors = gather_nodes(X, E_idx)
         
@@ -254,18 +202,6 @@ class ProteinFeatures(nn.Module):
         # Orientation features
         O_features = torch.cat((dU,Q), dim=-1)
 
-        # DEBUG: Viz pairwise orientations
-        # IMG = Q[:,:,:,:3]
-        # # IMG = dU
-        # dU_full = torch.zeros(X.shape[0], X.shape[1], X.shape[1], 3).scatter(
-        #     2, E_idx.unsqueeze(-1).expand(-1,-1,-1,3), IMG
-        # )
-        # print(dU_full)
-        # dU_full = (dU_full + 1.) / 2.
-        # plt.imshow(dU_full.data.numpy()[0])
-        # plt.show()
-        # exit(0)
-        # print(Q.sum(), dU.sum(), R.sum())
         return AD_features, O_features
 
     def _dihedrals(self, X, eps=1e-7):
@@ -291,23 +227,6 @@ class ProteinFeatures(nn.Module):
         D = F.pad(D, (1,2), 'constant', 0)
         D = D.view((D.size(0), int(D.size(1)/3), 3))
         phi, psi, omega = torch.unbind(D,-1)
-
-        # print(cosD.cpu().data.numpy().flatten())
-        # print(omega.sum().cpu().data.numpy().flatten())
-
-        # Bond angle calculation
-        # A = torch.acos(-(u_1 * u_0).sum(-1))
-
-        # DEBUG: Ramachandran plot
-        # x = phi.cpu().data.numpy().flatten()
-        # y = psi.cpu().data.numpy().flatten()
-        # plt.scatter(x * 180 / np.pi, y * 180 / np.pi, s=1, marker='.')
-        # plt.xlabel('phi')
-        # plt.ylabel('psi')
-        # plt.axis('square')
-        # plt.grid()
-        # plt.axis([-180,180,-180,180])
-        # plt.show()
 
         # Lift angle representations to the circle
         D_features = torch.cat((torch.cos(D), torch.sin(D)), 2)
@@ -362,9 +281,4 @@ class ProteinFeatures(nn.Module):
         E = self.edge_embedding(E)
         E = self.norm_edges(E)
 
-        # DEBUG
-        # U = (np.nan * torch.zeros(X.size(0),X.size(1),X.size(1),3)).scatter(2, E_idx.unsqueeze(-1).expand(-1,-1,-1,3), E[:,:,:,:3])
-        # plt.imshow(U.data.numpy()[0,:,:,0])
-        # plt.show()
-        # exit(0)
         return V, E, E_idx

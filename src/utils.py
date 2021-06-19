@@ -100,7 +100,7 @@ def load_checkpoint(checkpoint_path, model):
     print('\tEpoch {}'.format(state_dicts['epoch']))
     return
 
-def featurize(batch, device, shuffle_fraction=0.):
+def featurize(batch, device):
     """ Pack and pad batch into torch tensors """
     alphabet = 'ACDEFGHIKLMNPQRSTVWY'
     B = len(batch)
@@ -108,15 +108,6 @@ def featurize(batch, device, shuffle_fraction=0.):
     L_max = max([len(b['seq']) for b in batch])
     X = np.zeros([B, L_max, 4, 3])
     S = np.zeros([B, L_max], dtype=np.int32)
-
-    def shuffle_subset(n, p):
-        n_shuffle = np.random.binomial(n, p)
-        ix = np.arange(n)
-        ix_subset = np.random.choice(ix, size=n_shuffle, replace=False)
-        ix_subset_shuffled = np.copy(ix_subset)
-        np.random.shuffle(ix_subset_shuffled)
-        ix[ix_subset] = ix_subset_shuffled
-        return ix
 
     # Build the batch
     for i, b in enumerate(batch):
@@ -128,11 +119,7 @@ def featurize(batch, device, shuffle_fraction=0.):
 
         # Convert to labels
         indices = np.asarray([alphabet.index(a) for a in b['seq']], dtype=np.int32)
-        if shuffle_fraction > 0.:
-            idx_shuffle = shuffle_subset(l, shuffle_fraction)
-            S[i, :l] = indices[idx_shuffle]
-        else:
-            S[i, :l] = indices
+        S[i, :l] = indices
 
     # Mask
     isnan = np.isnan(X)
